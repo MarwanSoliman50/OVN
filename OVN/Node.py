@@ -45,6 +45,7 @@ class Node(object):
             # Updates the signal_information propagating it,
             # then recursively sending it to the Line that then sends it to the
             # next node to collapse it all back in the end
+            lightpath.signal_power = line.optimized_launch_power()
             lightpath = line.propagate(lightpath, occupation)
 
         return lightpath

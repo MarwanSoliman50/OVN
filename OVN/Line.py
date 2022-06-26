@@ -1,4 +1,4 @@
-from scipy.constants import c, Planck
+from scipy.constants import c, Planck, h, pi, e
 import numpy as np
 
 
@@ -9,20 +9,36 @@ class Line(object):
         self._successive = {}
         self._state = ['free']*10
         self._gain = 16
-        self._noise_figure = 3
+        self._noise_figure = 3 #5 2nd value
         self._amplifiers = int(np.ceil(self._length / 80e3))
         self._span_length = self._length / self._amplifiers
+        self._in_service = 1
+
 
         # Physical features
         self._adb = 0.2e-3  # dB/m (alpha dB)
-        self._b2 = 2.13e-26  # (m Hz^2)^(-1) |beta2|
+        self._b2 = 2.13e-26  #0.6 2nd value (m Hz^2)^(-1) |beta2|
         self._gamma = 1.27e-3  # (m W)^(-1)
-        self._Rs = 30e9
+        self._Rs = 32e9
         self._df = 50e9
+        self._Bn = 12.5e9  # noise bandwidth
+        self.f = 193.414e12
+
+    @property
+    def in_service(self):
+        return self._in_service
+
+    @in_service.setter
+    def in_service(self, in_service):
+        self._in_service = in_service
 
     @property
     def adb(self):
         return self._adb
+
+    @property
+    def Bn(self):
+        return self._Bn
 
     @property
     def b2(self):
@@ -82,24 +98,29 @@ class Line(object):
         if set(state).issubset(['free', 'occupied']):
             self._state = state
         else:
-            print('ERROR: line state not recognized. Value:', set(state) - set(['free', 'occupied']))
+            print('ERROR: line state not recognized. Value:', set(state) - {'free', 'occupied'})
 
     @successive.setter
     def successive(self, successive):
         self._successive = successive
 
-    def optimized_lauch_power(self, signal_power):
-        ase = self.ase_generation()
-        eta = self.nli_generation(signal_power)
-        p_opt = (ase / (2 * eta)) ** (1 / 3)  # Calculate optimum signal power
-
-    def nli_generation(self, signal_power, Rs, df): # Nonlinear Interface Noise
+# --------------------------------------------------------------------------------------------------------------
+    def nli_generation(self, signal_power):
         Bn = 12.5e9  # noise bandwidth
-        N_spans = self.amplifiers
-        nnli = 0  #come si fa???
-        nil = signal_power**3 * nnli * N_spans * Bn
+        nli = signal_power**3 * self.calculate_nli() * Bn * (self.amplifiers-1)#np.abs(self.alpha / (10 * np.log10(cs.e))) * 80e3
+        return nli
 
-        return nil
+    def calculate_nli(self) -> float: # slide 16 of OLS(8)
+        alpha = np.abs(self.adb / (10 * np.log10(e)))
+        log_arg = pi**2 * self.b2 * self.Rs**2 * len(self.state)**(2 * self.Rs/self.df)/(2* alpha)  # argument of log
+        factor = 16/(27 * pi) * self.gamma**2 / (4 * alpha * self.b2 * self.Rs**3)     # the other factor
+        nli = factor * np.log(log_arg)
+        return nli
+
+    def optimized_launch_power(self) -> float:  # slide 31 of OLS(8)
+        return (self.length * self.noise_figure * (h * self.Bn * self.f) / (2 * self.Bn * self.calculate_nli())) ** (1 / 3)
+
+# --------------------------------------------------------------------------------------------------------------
 
     def ase_generation(self): # Amplified Spontaneous Emissions
         gain_lin = 10 ** (self._gain / 10)
@@ -117,7 +138,7 @@ class Line(object):
 
     def noise_generation(self, lightpath):
         # noise = signal_power / (2 * self.length)
-        noise = self.ase_generation() + self.nli_generation(lightpath.signal_power, not self.Rs, self.df)
+        noise = self.ase_generation() + self.nli_generation(lightpath.signal_power)
         return noise
 
     def propagate(self, lightpath, occupation=False):
@@ -146,7 +167,6 @@ class Line(object):
         signal_information.add_latency(latency)
 
         # Update noise
-        #signal_power = signal_information.signal_power
         noise = self.noise_generation(signal_information)
         signal_information.add_noise(noise)
 

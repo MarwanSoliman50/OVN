@@ -1,4 +1,3 @@
-
 class Lightpath(object):
     def __init__(self, power, path, channel):
         self._signal_power = power
@@ -6,10 +5,8 @@ class Lightpath(object):
         self._noise_power = 0
         self._latency = 0
         self._channel = channel
-        self._Rs=32.0e9
-        self._df=50.039
-
-
+        self._Rs = 30e9
+        self._df = 50e9
 
     @property
     def Rs(self):
@@ -18,12 +15,14 @@ class Lightpath(object):
     @property
     def df(self):
         return self._df
+
     @property
     def signal_power(self):
         return self._signal_power
+
     @signal_power.setter
-    def set_signal_power(self,value):
-        self._signal_power=value
+    def signal_power(self, signal_power):
+        self._signal_power = signal_power
 
     @property
     def channel(self):
@@ -61,7 +60,6 @@ class Lightpath(object):
 
     def next(self):
         self.path = self.path[1:]
-
 
 
 class SignalInformation(object):
